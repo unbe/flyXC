@@ -9,16 +9,14 @@ services:
 
   # launch it with ' docker compose up -d pubsub'
   pubsub:
-    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:latest
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
     ports:
       - 8085:8085
-    command: gcloud beta emulators pubsub start
+    command: gcloud beta emulators pubsub start --host-port=0.0.0.0:8085 --project=fly-xc
 
-  # could not manage to make it work (port issue?)
-  # instead you can use the emulator on your workstation
-  # by launching "gcloud beta emulators datastore start"
+  # launch it with ' docker compose up -d datastore'
   datastore:
-    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:latest
-    command: gcloud beta emulators datastore start --project flyxc
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    command: gcloud beta emulators datastore start --host-port=0.0.0.0:8081 --project=fly-xc
     ports:
       - 8081:8081
