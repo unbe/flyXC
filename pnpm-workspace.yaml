@@ -52,6 +52,8 @@ catalog:
   wrangler: ^4.152.0
   eslint-plugin-unused-imports: ^4.4.1
   clsx: ^2.1.1
+  utm: ^1.1.1
+  '@types/utm': ^1.1.4
 
 allowBuilds:
   '@parcel/watcher': false

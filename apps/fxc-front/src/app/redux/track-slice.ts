@@ -18,7 +18,8 @@ import { getUniqueColor } from '../styles/track';
 import type { Response } from '../workers/track';
 import TrackWorker from '../workers/track?worker';
 import { setTimeSec } from './app-slice';
-import { setEnabled, setRoute } from './planner-slice';
+import type { Cylinder } from './planner-slice';
+import { setCylinders, setEnabled, setRoute } from './planner-slice';
 import type { AppDispatch, AppThunk, RootState } from './store';
 
 const FETCH_EVERY_SECONDS = 15;
@@ -154,6 +155,19 @@ export const fetchTrack = createAsyncThunk('track/fetch', async (params: FetchTr
     for (let i = 0; i < route.alt.length; i++) {
       coords.push(new google.maps.LatLng(route.lat[i], route.lon[i]));
     }
+    const cylinders: Cylinder[] = [];
+    if (route.radius.length > 0 && route.centerLat.length === route.radius.length) {
+      for (let i = 0; i < route.radius.length; i++) {
+        if (route.radius[i] > 0) {
+          cylinders.push({
+            lat: route.centerLat[i],
+            lon: route.centerLon[i],
+            radius: route.radius[i],
+          });
+        }
+      }
+    }
+    api.dispatch(setCylinders(cylinders));
     api.dispatch(setRoute(google.maps.geometry.encoding.encodePath(coords)));
     api.dispatch(setEnabled(true));
   }

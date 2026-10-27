@@ -11,4 +11,5 @@ export * from './models';
 export * from './proj';
 export * from './redis-keys';
 export * from './runtime-track';
+export * from './tasks';
 export * from './util';

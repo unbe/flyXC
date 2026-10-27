@@ -213,6 +213,18 @@ export interface Route {
    * @generated from protobuf field: repeated float alt = 3
    */
   alt: number[];
+  /**
+   * @generated from protobuf field: repeated float center_lat = 4
+   */
+  centerLat: number[];
+  /**
+   * @generated from protobuf field: repeated float center_lon = 5
+   */
+  centerLon: number[];
+  /**
+   * @generated from protobuf field: repeated uint32 radius = 6
+   */
+  radius: number[];
 }
 /**
  * @generated from protobuf message MetaTrackGroupsAndRoute
@@ -357,6 +369,9 @@ class Route$Type extends MessageType<Route> {
       { no: 1, name: 'lat', kind: 'scalar', repeat: 1 /*RepeatType.PACKED*/, T: 2 /*ScalarType.FLOAT*/ },
       { no: 2, name: 'lon', kind: 'scalar', repeat: 1 /*RepeatType.PACKED*/, T: 2 /*ScalarType.FLOAT*/ },
       { no: 3, name: 'alt', kind: 'scalar', repeat: 1 /*RepeatType.PACKED*/, T: 2 /*ScalarType.FLOAT*/ },
+      { no: 4, name: 'center_lat', kind: 'scalar', repeat: 1 /*RepeatType.PACKED*/, T: 2 /*ScalarType.FLOAT*/ },
+      { no: 5, name: 'center_lon', kind: 'scalar', repeat: 1 /*RepeatType.PACKED*/, T: 2 /*ScalarType.FLOAT*/ },
+      { no: 6, name: 'radius', kind: 'scalar', repeat: 1 /*RepeatType.PACKED*/, T: 13 /*ScalarType.UINT32*/ },
     ]);
   }
 }

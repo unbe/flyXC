@@ -69,10 +69,12 @@
   "dependencies": {
     "@swc-node/register": "1.11.1",
     "@swc/core": "1.15.8",
+    "@types/utm": "catalog:",
     "axios": "1.20.0",
     "core-js": "catalog:",
     "regenerator-runtime": "0.14.1",
     "tsconfig-paths": "^4.2.0",
-    "tslib": "catalog:default"
+    "tslib": "catalog:default",
+    "utm": "catalog:"
   }
 }

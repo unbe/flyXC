@@ -5,6 +5,12 @@ import { createSlice } from '@reduxjs/toolkit';
 import { getUrlParamValues, ParamNames } from '../logic/history';
 import type { LeagueCode } from '../logic/score/league/leagues';
 
+export type Cylinder = {
+  lat: number;
+  lon: number;
+  radius: number;
+};
+
 export type PlannerState = {
   score?: ScoringResult;
   speedKmh: number;
@@ -14,6 +20,7 @@ export type PlannerState = {
   enabled: boolean;
   // Encoded route.
   route: string;
+  cylinders: Cylinder[];
   isFreeDrawing: boolean;
 };
 
@@ -34,6 +41,7 @@ const initialState: PlannerState = {
   league: (getUrlParamValues(ParamNames.league)[0] ?? localStorage.getItem('league') ?? 'xc') as LeagueCode,
   enabled,
   route,
+  cylinders: [],
   isFreeDrawing: false,
 };
 
@@ -62,6 +70,12 @@ const plannerSlice = createSlice({
     },
     setRoute: (state, action: PayloadAction<string>) => {
       state.route = action.payload;
+      if (action.payload === '') {
+        state.cylinders = [];
+      }
+    },
+    setCylinders: (state, action: PayloadAction<Cylinder[]>) => {
+      state.cylinders = action.payload;
     },
     setEnabled: (state, action: PayloadAction<boolean>) => {
       state.enabled = action.payload;
@@ -76,6 +90,7 @@ const plannerSlice = createSlice({
     selectSpeedKmh: (state) => state.speedKmh,
     selectLeague: (state) => state.league,
     selectRoute: (state) => state.route,
+    selectCylinders: (state) => state.cylinders,
     selectEnabled: (state) => state.enabled,
     selectIsFreeDrawing: (state) => state.isFreeDrawing,
   },
@@ -90,6 +105,7 @@ export const {
   incrementSpeed,
   decrementSpeed,
   setRoute,
+  setCylinders,
   setEnabled,
   setIsFreeDrawing,
 } = plannerSlice.actions;
@@ -100,6 +116,7 @@ export const {
   selectSpeedKmh,
   selectLeague,
   selectRoute,
+  selectCylinders,
   selectEnabled,
   selectIsFreeDrawing,
 } = plannerSlice.selectors;

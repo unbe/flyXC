@@ -36,6 +36,7 @@ describe('planner-slice', () => {
       league: 'xc' as const,
       enabled: false,
       route: '',
+      cylinders: [],
       isFreeDrawing: false,
     };
 

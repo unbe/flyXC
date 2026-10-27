@@ -1,5 +1,3 @@
-import { protos } from '@flyxc/common';
-
 import { parse } from './xctsk';
 
 describe('Parse XCTSk files', () => {
@@ -74,8 +72,7 @@ describe('Parse XCTSk files', () => {
 
   describe('Valid', () => {
     test('route', () => {
-      expect(
-        parse(`{
+      const route = parse(`{
         "taskType": "CLASSIC",
         "version": 1,
         "turnpoints": [
@@ -98,14 +95,16 @@ describe('Parse XCTSk files', () => {
             }
           }
         ]
-      }`),
-      ).toEqual(
-        protos.Route.create({
-          lat: [1.1, 2.2],
-          lon: [-1.1, -2.2],
-          alt: [3, 0],
-        }),
-      );
+      }`);
+      expect(route).not.toBeNull();
+      expect(route?.alt).toEqual([3, 0]);
+      expect(route?.centerLat).toEqual([1.1, 2.2]);
+      expect(route?.centerLon).toEqual([-1.1, -2.2]);
+      expect(route?.radius).toEqual([400, 400]);
+      expect(route?.lat[0]).toBeCloseTo(1.1, 5);
+      expect(route?.lon[0]).toBeCloseTo(-1.1, 5);
+      expect(route?.lat[1]).toBeCloseTo(2.19745, 5);
+      expect(route?.lon[1]).toBeCloseTo(-2.19745, 5);
     });
   });
 });

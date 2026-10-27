@@ -54,11 +54,14 @@ export class PathElement extends connect(store)(LitElement) {
   @state()
   private encodedRoute = '';
   @state()
+  private cylinders: plannerSlice.Cylinder[] = [];
+  @state()
   private isFreeDrawing = false;
 
   private currentTrack?: RuntimeTrack;
   private line?: google.maps.Polyline;
   private optimizedLine?: google.maps.Polyline;
+  private cylinderCircles: google.maps.Circle[] = [];
   // Set to true to block updating the state.
   // i.e. when the line is being created from the state.
   private doNotSyncState = false;
@@ -75,6 +78,7 @@ export class PathElement extends connect(store)(LitElement) {
     this.league = plannerSlice.selectLeague(state);
     this.enabled = plannerSlice.selectEnabled(state);
     this.encodedRoute = plannerSlice.selectRoute(state);
+    this.cylinders = plannerSlice.selectCylinders(state);
     this.isFreeDrawing = plannerSlice.selectIsFreeDrawing(state);
   }
 
@@ -84,10 +88,17 @@ export class PathElement extends connect(store)(LitElement) {
         this.createPlannerElement(this.map);
         this.line = this.createLine();
         this.updateLineFromState();
+        this.updateCylinders();
         if (this.encodedRoute.length > 0) {
           const bounds = new google.maps.LatLngBounds();
           this.line.getPath().forEach((p) => {
             bounds.extend(p);
+          });
+          this.cylinderCircles.forEach((circle) => {
+            const circleBounds = circle.getBounds();
+            if (circleBounds) {
+              bounds.union(circleBounds);
+            }
           });
           this.map.fitBounds(bounds);
         }
@@ -100,6 +111,9 @@ export class PathElement extends connect(store)(LitElement) {
     }
     if ((changedProperties.has('encodedRoute') || changedProperties.has('isFreeDrawing')) && this.enabled) {
       this.updateLineFromState();
+    }
+    if ((changedProperties.has('cylinders') || changedProperties.has('isFreeDrawing')) && this.enabled) {
+      this.updateCylinders();
     }
     return super.shouldUpdate(changedProperties);
   }
@@ -128,6 +142,33 @@ export class PathElement extends connect(store)(LitElement) {
     }
     this.doNotSyncState = false;
     this.optimize();
+  }
+
+  private updateCylinders(): void {
+    this.cylinderCircles.forEach((circle) => circle.setMap(null));
+    this.cylinderCircles = [];
+
+    if (this.isFreeDrawing || this.cylinders.length === 0) {
+      return;
+    }
+
+    for (const cylinder of this.cylinders) {
+      if (cylinder.radius > 0) {
+        const circle = new google.maps.Circle({
+          map: this.map,
+          center: { lat: cylinder.lat, lng: cylinder.lon },
+          radius: cylinder.radius,
+          fillColor: '#0000ff',
+          fillOpacity: 0.1,
+          strokeColor: '#0000ff',
+          strokeOpacity: 0.6,
+          strokeWeight: 1,
+          zIndex: 30,
+          clickable: false,
+        });
+        this.cylinderCircles.push(circle);
+      }
+    }
   }
 
   private setDefaultPath() {
@@ -399,6 +440,8 @@ export class PathElement extends connect(store)(LitElement) {
     this.line = undefined;
     this.optimizedLine?.setMap(null);
     this.optimizedLine = undefined;
+    this.cylinderCircles.forEach((circle) => circle.setMap(null));
+    this.cylinderCircles = [];
     this.closingSector?.setMap(null);
     this.closingSector = undefined;
     this.faiSectors?.setMap(null);

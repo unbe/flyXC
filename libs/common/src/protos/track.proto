@@ -81,6 +81,9 @@ message Route {
   repeated float lat = 1;
   repeated float lon = 2;
   repeated float alt = 3;
+  repeated float center_lat = 4;
+  repeated float center_lon = 5;
+  repeated uint32 radius = 6;
 }
 
 message MetaTrackGroupsAndRoute {

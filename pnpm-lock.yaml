@@ -67,6 +67,9 @@ catalogs:
     '@types/react-redux':
       specifier: ^7.1.35
       version: 7.1.35
+    '@types/utm':
+      specifier: ^1.1.4
+      version: 1.1.4
     '@types/validator':
       specifier: ^13.15.10
       version: 13.15.10
@@ -127,6 +130,9 @@ catalogs:
     undici:
       specifier: ~8.12.3
       version: 8.12.3
+    utm:
+      specifier: ^1.1.1
+      version: 1.1.1
     vite:
       specifier: ^8.3.5
       version: 8.3.5
@@ -156,6 +162,9 @@ importers:
       '@swc/core':
         specifier: 1.15.8
         version: 1.15.8(@swc/helpers@0.5.23)
+      '@types/utm':
+        specifier: 'catalog:'
+        version: 1.1.4
       axios:
         specifier: 1.20.0
         version: 1.20.0(supports-color@8.1.1)
@@ -171,6 +180,9 @@ importers:
       tslib:
         specifier: catalog:default
         version: 2.8.1
+      utm:
+        specifier: 'catalog:'
+        version: 1.1.1
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -463,7 +475,7 @@ importers:
         version: 7.1.1(rolldown@1.2.15)(rollup@4.54.0)
       vite-plugin-pwa:
         specifier: ^2.0.0
-        version: 2.0.0(@vite-pwa/assets-generator@1.0.2(@types/node@26.6.5))(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.1.3)(sass@1.97.1)(stylus@0.64.0)(terser@5.49.0)(yaml@2.9.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
+        version: 2.0.0(@vite-pwa/assets-generator@1.0.2(@types/node@26.6.5))(supports-color@8.1.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.1.3)(sass@1.97.1)(stylus@0.64.0)(terser@5.49.0)(yaml@2.9.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1)
       workbox-build:
         specifier: ^7.4.1
         version: 7.4.1(@types/babel__core@7.20.5)
@@ -677,6 +689,9 @@ importers:
       tslib:
         specifier: catalog:default
         version: 2.8.1
+      utm:
+        specifier: catalog:default
+        version: 1.1.1
       vaadin-nodom:
         specifier: workspace:*
         version: link:../vaadin-nodom
@@ -687,6 +702,9 @@ importers:
       '@protobuf-ts/protoc':
         specifier: ^2.11.1
         version: 2.11.1
+      '@types/utm':
+        specifier: catalog:default
+        version: 1.1.4
 
   libs/common-node:
     dependencies:
@@ -3963,6 +3981,9 @@ packages:
 
   '@types/use-sync-external-store@0.0.6':
     resolution: {integrity: sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg==}
+
+  '@types/utm@1.1.4':
+    resolution: {integrity: sha512-L9vu2DLzfumvZaBhr4Aq9jOCGX0CMF5pBlvaUO4ryZXEEM1BF6A3G/xnR30SZBgBizco9JNdC0Q5WoYqaYf3WA==}
 
   '@types/validator@13.15.10':
     resolution: {integrity: sha512-T8L6i7wCuyoK8A/ZeLYt1+q0ty3Zb9+qbSSvrIVitzT3YjZqkTZ40IbRsPanlB4h1QB3JVL1SYCdR6ngtFYcuA==}
@@ -8692,6 +8713,9 @@ packages:
   util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
+  utm@1.1.1:
+    resolution: {integrity: sha512-rJIv6i1u86OVy91Burh/6oRFfE8zOCd6Unc8fvA0N7fjQT43ogqhVeUp5NByaZPe278QyiA5wMMEaAU9Jx6QRA==}
+
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
     deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
@@ -10444,7 +10468,7 @@ snapshots:
       eslint: 10.13.0(jiti@2.7.0)(supports-color@8.1.1)
       eslint-visitor-keys: 3.4.3
 
-  '@eslint-community/eslint-utils@4.9.1(eslint@8.57.1)':
+  '@eslint-community/eslint-utils@4.9.1(eslint@8.57.1(supports-color@8.1.1))':
     dependencies:
       eslint: 8.57.1(supports-color@8.1.1)
       eslint-visitor-keys: 3.4.3
@@ -12672,6 +12696,8 @@ snapshots:
 
   '@types/use-sync-external-store@0.0.6': {}
 
+  '@types/utm@1.1.4': {}
+
   '@types/validator@13.15.10': {}
 
   '@types/yargs-parser@21.0.3': {}
@@ -14598,7 +14624,7 @@ snapshots:
 
   eslint@8.57.1(supports-color@8.1.1):
     dependencies:
-      '@eslint-community/eslint-utils': 4.9.1(eslint@8.57.1)
+      '@eslint-community/eslint-utils': 4.9.1(eslint@8.57.1(supports-color@8.1.1))
       '@eslint-community/regexpp': 4.12.2
       '@eslint/eslintrc': 2.1.4(supports-color@8.1.1)
       '@eslint/js': 8.57.1
@@ -18168,6 +18194,8 @@ snapshots:
 
   util-deprecate@1.0.2: {}
 
+  utm@1.1.1: {}
+
   uuid@8.3.2: {}
 
   v8-compile-cache-lib@3.0.1: {}
@@ -18215,7 +18243,7 @@ snapshots:
       - typescript
       - webpack
 
-  vite-plugin-pwa@2.0.0(@vite-pwa/assets-generator@1.0.2(@types/node@26.6.5))(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.1.3)(sass@1.97.1)(stylus@0.64.0)(terser@5.49.0)(yaml@2.9.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1):
+  vite-plugin-pwa@2.0.0(@vite-pwa/assets-generator@1.0.2(@types/node@26.6.5))(supports-color@8.1.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(less@4.1.3)(sass@1.97.1)(stylus@0.64.0)(terser@5.49.0)(yaml@2.9.0))(workbox-build@7.4.1(@types/babel__core@7.20.5))(workbox-window@7.4.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       pretty-bytes: 6.1.1

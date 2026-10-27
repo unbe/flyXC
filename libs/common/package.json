@@ -15,10 +15,12 @@
     "mapbox-vector-tile": "catalog:default",
     "tiny-lru": "catalog:default",
     "tslib": "catalog:default",
+    "utm": "catalog:default",
     "vaadin-nodom": "workspace:*"
   },
   "devDependencies": {
     "@protobuf-ts/plugin": "^2.11.1",
-    "@protobuf-ts/protoc": "^2.11.1"
+    "@protobuf-ts/protoc": "^2.11.1",
+    "@types/utm": "catalog:default"
   }
 }
