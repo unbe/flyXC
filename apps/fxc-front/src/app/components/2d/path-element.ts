@@ -2,7 +2,7 @@ import '../ui/share-modal';
 import '../ui/waypoint-modal';
 
 import type { LatLon, RuntimeTrack } from '@flyxc/common';
-import { clampToCylinder, getRequiredCylinderIndex } from '@flyxc/common';
+import { clampToCylinder, getRequiredCylinderIndex, reoptimizeTaskPoints } from '@flyxc/common';
 import { CircuitType } from '@flyxc/optimizer/src/lib/api';
 import type { ScoringResult } from '@flyxc/optimizer/src/lib/optimizer';
 import { modalController, toastController } from '@ionic/core/components';
@@ -67,6 +67,7 @@ export class PathElement extends connect(store)(LitElement) {
   private cylinderCircles: google.maps.Circle[] = [];
   private turnpointHandles: TurnpointHandle[] = [];
   private midpointHandles: MidpointHandle[] = [];
+  private manuallyMovedCylinders = new Set<number>();
   // Set to true to block updating the state.
   // i.e. when the line is being created from the state.
   private doNotSyncState = false;
@@ -120,6 +121,9 @@ export class PathElement extends connect(store)(LitElement) {
       this.updateLineFromState();
     }
     if ((changedProperties.has('cylinders') || changedProperties.has('isFreeDrawing')) && this.enabled) {
+      if (changedProperties.has('cylinders')) {
+        this.manuallyMovedCylinders.clear();
+      }
       this.updateCylinders();
     }
     return super.shouldUpdate(changedProperties);
@@ -224,6 +228,11 @@ export class PathElement extends connect(store)(LitElement) {
               }
             },
             () => {
+              const reqIdx = getRequiredCylinderIndex(this.getPathPoints(), i, this.cylinders);
+              if (reqIdx !== null) {
+                this.manuallyMovedCylinders.add(reqIdx);
+              }
+              this.reoptimizeTaskRoute();
               this.handlePathUpdates();
             },
             () => {
@@ -263,6 +272,7 @@ export class PathElement extends connect(store)(LitElement) {
               this.isDraggingTurnpoint = false;
             },
             () => {
+              this.reoptimizeTaskRoute();
               this.handlePathUpdates();
             },
           ),
@@ -276,6 +286,7 @@ export class PathElement extends connect(store)(LitElement) {
   }
 
   private setDefaultPath() {
+    this.manuallyMovedCylinders.clear();
     if (this.line) {
       const path = this.line.getPath();
       path.clear();
@@ -287,7 +298,14 @@ export class PathElement extends connect(store)(LitElement) {
   }
 
   private appendToPath(coord: google.maps.LatLng): void {
-    this.line?.getPath().push(coord);
+    if (!this.line) {
+      return;
+    }
+    this.doNotSyncState = true;
+    this.line.getPath().push(coord);
+    this.doNotSyncState = false;
+    this.reoptimizeTaskRoute();
+    this.handlePathUpdates();
   }
 
   private createLine(): google.maps.Polyline {
@@ -452,6 +470,25 @@ export class PathElement extends connect(store)(LitElement) {
     this.handlePathUpdates();
   }
 
+  private reoptimizeTaskRoute(): void {
+    if (!this.line || this.isFreeDrawing || this.cylinders.length === 0) {
+      return;
+    }
+    const points = this.getPathPoints();
+    const optimized = reoptimizeTaskPoints(points, this.cylinders, this.manuallyMovedCylinders);
+    const path = this.line.getPath();
+    this.doNotSyncState = true;
+    this.isClamping = true;
+    for (let i = 0; i < optimized.length; i++) {
+      const cur = path.getAt(i);
+      if (cur.lat() !== optimized[i].lat || cur.lng() !== optimized[i].lon) {
+        path.setAt(i, new google.maps.LatLng(optimized[i].lat, optimized[i].lon));
+      }
+    }
+    this.isClamping = false;
+    this.doNotSyncState = false;
+  }
+
   private handleDeleteVertex(index: number): void {
     if (!this.line) {
       return;
@@ -466,17 +503,17 @@ export class PathElement extends connect(store)(LitElement) {
 
     const requiredCylIdx = getRequiredCylinderIndex(this.getPathPoints(), index, this.cylinders);
     if (requiredCylIdx === null && path.getLength() > 2) {
+      this.doNotSyncState = true;
       path.removeAt(index);
+      this.doNotSyncState = false;
+      this.reoptimizeTaskRoute();
+      this.handlePathUpdates();
       return;
     }
 
     if (requiredCylIdx !== null) {
-      const cylinder = this.cylinders[requiredCylIdx];
-      const optLat = cylinder.optLat ?? cylinder.lat;
-      const optLon = cylinder.optLon ?? cylinder.lon;
-      this.isClamping = true;
-      path.setAt(index, new google.maps.LatLng(optLat, optLon));
-      this.isClamping = false;
+      this.manuallyMovedCylinders.delete(requiredCylIdx);
+      this.reoptimizeTaskRoute();
       this.handlePathUpdates();
     }
   }
@@ -515,7 +552,11 @@ export class PathElement extends connect(store)(LitElement) {
         const last = path.getAt(path.getLength() - 1);
         const first = path.getAt(0);
         if (!first.equals(last)) {
+          this.doNotSyncState = true;
           path.push(first);
+          this.doNotSyncState = false;
+          this.reoptimizeTaskRoute();
+          this.handlePathUpdates();
         }
       });
       el.addEventListener('share', async () => {
@@ -596,6 +637,7 @@ export class PathElement extends connect(store)(LitElement) {
     this.turnpointHandles = [];
     this.midpointHandles.forEach((h) => h.setMap(null));
     this.midpointHandles = [];
+    this.manuallyMovedCylinders.clear();
     this.closingSector?.setMap(null);
     this.closingSector = undefined;
     this.faiSectors?.setMap(null);

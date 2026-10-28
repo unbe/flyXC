@@ -1,7 +1,13 @@
 import { getDistance } from 'geolib';
 
 import * as protos from '../protos/track';
-import { clampToCylinder, getRequiredCylinderIndex, isPathConformingToTask, optimizeTask } from './tasks';
+import {
+  clampToCylinder,
+  getRequiredCylinderIndex,
+  isPathConformingToTask,
+  optimizeTask,
+  reoptimizeTaskPoints,
+} from './tasks';
 
 describe('tasks', () => {
   describe('clampToCylinder', () => {
@@ -107,6 +113,30 @@ describe('tasks', () => {
       expect(isPathConformingToTask(points, cylinders)).toBe(true);
       expect(getRequiredCylinderIndex(points, 1, cylinders)).toBeNull();
       expect(getRequiredCylinderIndex(points, 2, cylinders)).toBeNull();
+    });
+
+    test('reoptimizeTaskPoints updates unmoved cylinders when a point is moved and when reset', () => {
+      const initialPoints = reoptimizeTaskPoints(
+        cylinders.map((c) => ({ lat: c.lat, lon: c.lon })),
+        cylinders,
+        new Set(),
+      );
+
+      // Move cylinder 2 point manually to the southern edge of cylinder 2
+      const movedPt2 = clampToCylinder({ lat: cylinders[2].lat - 0.02, lon: cylinders[2].lon }, cylinders[2]);
+      const pointsAfterMove = [initialPoints[0], initialPoints[1], movedPt2];
+      const reoptimized = reoptimizeTaskPoints(pointsAfterMove, cylinders, new Set([2]));
+
+      // Point 2 stays fixed at movedPt2, while point 1 (unmoved) adjusts to a new optimized position
+      expect(reoptimized[2]).toEqual(movedPt2);
+      expect(reoptimized[1]).not.toEqual(initialPoints[1]);
+
+      // When point 2 is "deleted" (removed from manuallyMovedCylinders), all points snap back to initialPoints
+      const resetPoints = reoptimizeTaskPoints(reoptimized, cylinders, new Set());
+      expect(resetPoints[1].lat).toBeCloseTo(initialPoints[1].lat, 5);
+      expect(resetPoints[1].lon).toBeCloseTo(initialPoints[1].lon, 5);
+      expect(resetPoints[2].lat).toBeCloseTo(initialPoints[2].lat, 5);
+      expect(resetPoints[2].lon).toBeCloseTo(initialPoints[2].lon, 5);
     });
   });
 });

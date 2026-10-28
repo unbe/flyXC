@@ -11,6 +11,7 @@ type Point = {
   fx: number;
   fy: number;
   radius: number;
+  fixed?: boolean;
 };
 
 function createPoint(x: number, y: number, radius = 0): Point {
@@ -233,7 +234,9 @@ function optimizeStep(points: Point[], esIndex = -1): number {
   for (let index = 1; index < points.length; index++) {
     // Get the target cylinder c and its preceding and succeeding points
     const [c, a, b] = getTargetPoints(points, index, esIndex);
-    processCylinder(c, a, b);
+    if (!c.fixed) {
+      processCylinder(c, a, b);
+    }
     // Calculate the distance from A to the C fix point
     const legDistance = Math.hypot(a.x - c.fx, a.y - c.fy);
     distance += legDistance;
@@ -251,7 +254,7 @@ export function optimize(points: Point[], esIndex = -1): number {
     const distance = optimizeStep(points, esIndex);
     // See if the difference between the last distance is
     // smaller than the tolerance
-    if (lastDistance - distance < tolerance) {
+    if (Math.abs(lastDistance - distance) < tolerance) {
       break;
     }
     lastDistance = distance;
@@ -385,6 +388,68 @@ export function getRequiredCylinderIndex(
     return null;
   }
   return prefixCyl;
+}
+
+// Re-optimizes any cylinder turnpoints that are not in `manuallyMovedCylinders`,
+// keeping manually moved cylinder turnpoints and extra waypoints fixed at their current locations.
+export function reoptimizeTaskPoints(
+  points: { lat: number; lon: number }[],
+  cylinders: TaskCylinder[],
+  manuallyMovedCylinders: ReadonlySet<number>,
+  esIndex = -1,
+): { lat: number; lon: number }[] {
+  if (points.length === 0 || cylinders.length === 0) {
+    return points;
+  }
+
+  const task: Point[] = [];
+  let zone: number | undefined;
+  let zoneLetter: string | undefined;
+
+  for (let i = 0; i < points.length; i++) {
+    const reqCylIdx = getRequiredCylinderIndex(points, i, cylinders);
+    if (reqCylIdx !== null && !manuallyMovedCylinders.has(reqCylIdx)) {
+      const cyl = cylinders[reqCylIdx];
+      const utmCenter = utm.fromLatLon(cyl.lat, cyl.lon, zone);
+      task.push({
+        x: utmCenter.easting,
+        y: utmCenter.northing,
+        fx: utmCenter.easting,
+        fy: utmCenter.northing,
+        radius: cyl.radius,
+        fixed: false,
+      });
+      zone = utmCenter.zoneNum;
+      zoneLetter = utmCenter.zoneLetter;
+    } else {
+      const utmPt = utm.fromLatLon(points[i].lat, points[i].lon, zone);
+      task.push({
+        x: utmPt.easting,
+        y: utmPt.northing,
+        fx: utmPt.easting,
+        fy: utmPt.northing,
+        radius: 0,
+        fixed: true,
+      });
+      zone = utmPt.zoneNum;
+      zoneLetter = utmPt.zoneLetter;
+    }
+  }
+
+  optimize(task, esIndex);
+
+  return points.map((pt, i) => {
+    if (task[i].fixed) {
+      return pt;
+    }
+    const { latitude: lat, longitude: lon } = utm.toLatLon(
+      task[i].fx,
+      task[i].fy,
+      zone as number,
+      zoneLetter as string,
+    );
+    return { lat, lon };
+  });
 }
 
 // Clamps a point so that it lies on or within the given cylinder.
