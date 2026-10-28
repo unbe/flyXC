@@ -60,18 +60,23 @@ This document serves as the source of truth for architectural decisions, system 
   - Parses JSON `.xctsk` files, extracting each turnpoint's `lat`, `lon`, `altSmoothed`, `radius`, and detecting the End of Speed Section (`tp.type === 'ESS'`, passed as `esIndex`).
   - Populates `centerLat`, `centerLon`, and `radius` on `protos.Route`, then runs `optimizeTask(route, esIndex)` from `libs/common/src/lib/tasks.ts`.
 - **Optimization Algorithm (`libs/common/src/lib/tasks.ts`)**:
-  - Converts turnpoint coordinates (`centerLat`, `centerLon`) to UTM (`utm.fromLatLon`), anchoring the UTM zone number and letter to the first turnpoint so all turnpoints share a consistent Cartesian projection.
-  - Iteratively adjusts target points `(fX[i], fY[i])` on each cylinder of radius `r[i]` using the angle bisector / ray-circle intersection method (`optimize()`), converging until total path distance changes by `< 0.1m` (up to 100 iterations).
-  - **ESS (`esIndex`) Handling**: When `esIndex !== -1`, points at `i >= esIndex` (End of Speed Section and Goal) use the next point (`esIndex + 1`, or `esIndex - 1` if `esIndex` is the last point) as their outgoing reference `bIdx`, matching standard XC competition scoring rules where the shortest path aims toward Goal through the ESS cylinder.
-  - Converts the optimized `(fX[i], fY[i])` back to WGS84 (`utm.toLatLon`, rounded to 5 decimal places) and stores them in `route.lat` and `route.lon`, while preserving `centerLat`, `centerLon`, and `radius`.
+  - Adapted from `ToninoTarsi/task-creator` (`julien66/task-creator`).
+  - Converts turnpoint coordinates (`centerLat`, `centerLon`) to UTM (`utm.fromLatLon`), anchoring the UTM zone number and letter so all turnpoints share a consistent Cartesian projection.
+  - Iteratively adjusts target points `(fx, fy)` on each cylinder of radius `radius` using line-circle intersection and reflection (`optimize()`), converging until total path distance changes by `< 1.0m` (up to `count * 10` steps).
+  - **ESS (`esIndex`) Handling**: For `index == points.length - 1` or `index == esIndex`, the outgoing reference point `b` uses the target cylinder's center `c`.
+  - Converts the optimized `(fx, fy)` back to WGS84 (`utm.toLatLon`) and stores them in `route.lat` and `route.lon`, while preserving `centerLat`, `centerLon`, and `radius`.
+  - **Cylinder Clamping (`clampToCylinder`)**: Uses spherical geometry (`EARTH_RADIUS = 6378137`, matching `google.maps.Circle` and `google.maps.geometry.spherical`) to check if a point lies within `cylinder.radius` of `(cylinder.lat, cylinder.lon)`. If outside, projects the point onto the cylinder perimeter along the great-circle bearing from the cylinder center.
 
 ### Frontend Task & Cylinder Rendering (`apps/fxc-front`)
 - **State (`apps/fxc-front/src/app/redux/planner-slice.ts`)**:
   - `planner.route`: Encoded circuit string representing the route polyline vertices (initialized from `route.lat` / `route.lon`, which are the optimized points on the cylinders).
   - `planner.cylinders`: Array of `Cylinder` (`{ lat, lon, radius }`) populated by `fetchTrack` (`apps/fxc-front/src/app/redux/track-slice.ts`) when a `MetaTrackGroup` contains a `route` with `centerLat`, `centerLon`, and `radius`.
-  - Calling `setRoute('')` (e.g. closing the planner/route) also clears `planner.cylinders`.
-- **2D Map Rendering (`apps/fxc-front/src/app/components/2d/path-element.ts`)**:
+  - Calling `setRoute('')` (e.g. closing or resetting the planner/route) also clears `planner.cylinders`.
+- **2D Map Rendering & Task Conformance (`apps/fxc-front/src/app/components/2d/path-element.ts`)**:
   - Subscribes to `plannerSlice.selectCylinders(state)`.
-  - Renders `google.maps.Circle` overlays for each cylinder with `radius > 0` (`strokeColor: '#FF00FF'`, `fillColor: '#FF00FF'`, `clickable: false`).
-  - Unions each circle's bounds into the `LatLngBounds` when fitting the map to the loaded route (`centerMap`), ensuring full cylinders remain visible inside the viewport.
+  - Renders `google.maps.Circle` overlays for each cylinder with `radius > 0` (`strokeColor: '#0000ff'`, `fillColor: '#0000ff'`, `clickable: false`).
+  - Unions each circle's bounds into the `LatLngBounds` when fitting the map to the loaded route, ensuring full cylinders remain visible inside the viewport.
   - Cleans up `cylinderCircles` on re-render and `disconnectedCallback()`.
+  - **Conforming Turnpoints to Cylinders**:
+    - On `set_at` (when a user drags a turnpoint vertex `index`), if `index < this.cylinders.length`, `handleSetAt(index)` clamps the new coordinates via `clampToCylinder(pt, this.cylinders[index])` and updates the vertex on the `MVCArray` (guarded by `this.isClamping` to prevent recursive `set_at` loops) before syncing state and re-scoring.
+    - When `this.cylinders.length > 0`, adding new vertices via midpoint dragging (`insert_at`), map right-click (`appendToPath`), or `close-flight`, as well as deleting vertices via vertex right-click / double-click, are blocked so the route always conforms to the task's turnpoint sequence.

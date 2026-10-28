@@ -2,6 +2,7 @@ import '../ui/share-modal';
 import '../ui/waypoint-modal';
 
 import type { LatLon, RuntimeTrack } from '@flyxc/common';
+import { clampToCylinder } from '@flyxc/common';
 import { CircuitType } from '@flyxc/optimizer/src/lib/api';
 import type { ScoringResult } from '@flyxc/optimizer/src/lib/optimizer';
 import { modalController, toastController } from '@ionic/core/components';
@@ -65,6 +66,7 @@ export class PathElement extends connect(store)(LitElement) {
   // Set to true to block updating the state.
   // i.e. when the line is being created from the state.
   private doNotSyncState = false;
+  private isClamping = false;
   private onPointAdded?: google.maps.MapsEventListener;
   private onBoundsChanged?: google.maps.MapsEventListener;
   private closingSector?: ClosingSector;
@@ -183,7 +185,9 @@ export class PathElement extends connect(store)(LitElement) {
   }
 
   private appendToPath(coord: google.maps.LatLng): void {
-    this.line?.getPath().push(coord);
+    if (this.cylinders.length === 0) {
+      this.line?.getPath().push(coord);
+    }
   }
 
   private createLine(): google.maps.Polyline {
@@ -203,11 +207,11 @@ export class PathElement extends connect(store)(LitElement) {
     });
 
     const path = line.getPath();
-    google.maps.event.addListener(path, 'set_at', () => this.handlePathUpdates());
+    google.maps.event.addListener(path, 'set_at', (index: number) => this.handleSetAt(index));
     google.maps.event.addListener(path, 'remove_at', () => this.handlePathUpdates());
-    google.maps.event.addListener(path, 'insert_at', () => this.handlePathUpdates());
+    google.maps.event.addListener(path, 'insert_at', (index: number) => this.handleInsertAt(index));
     google.maps.event.addListener(line, 'rightclick', (event: google.maps.PolyMouseEvent): void => {
-      if (event.vertex !== undefined) {
+      if (this.cylinders.length === 0 && event.vertex !== undefined) {
         const path = line.getPath();
         if (path.getLength() > 2) {
           path.removeAt(event.vertex);
@@ -215,7 +219,7 @@ export class PathElement extends connect(store)(LitElement) {
       }
     });
     google.maps.event.addListener(line, 'dblclick', (event: google.maps.PolyMouseEvent): void => {
-      if (event.vertex !== undefined) {
+      if (this.cylinders.length === 0 && event.vertex !== undefined) {
         const path = line.getPath();
         if (path.getLength() > 2) {
           path.removeAt(event.vertex);
@@ -334,6 +338,36 @@ export class PathElement extends connect(store)(LitElement) {
     await modal.present();
   }
 
+  private handleSetAt(index: number): void {
+    if (this.isClamping) {
+      return;
+    }
+    if (!this.doNotSyncState && this.line && index < this.cylinders.length) {
+      const path = this.line.getPath();
+      const pt = path.getAt(index);
+      const clamped = clampToCylinder({ lat: pt.lat(), lon: pt.lng() }, this.cylinders[index]);
+      if (clamped.lat !== pt.lat() || clamped.lon !== pt.lng()) {
+        this.isClamping = true;
+        path.setAt(index, new google.maps.LatLng(clamped.lat, clamped.lon));
+        this.isClamping = false;
+      }
+    }
+    this.handlePathUpdates();
+  }
+
+  private handleInsertAt(index: number): void {
+    if (!this.doNotSyncState && this.line && this.cylinders.length > 0) {
+      const path = this.line.getPath();
+      if (path.getLength() > this.cylinders.length) {
+        this.doNotSyncState = true;
+        path.removeAt(index);
+        this.doNotSyncState = false;
+        return;
+      }
+    }
+    this.handlePathUpdates();
+  }
+
   private handlePathUpdates(): void {
     if (!this.line) {
       return;
@@ -361,6 +395,9 @@ export class PathElement extends connect(store)(LitElement) {
       const el = (this.plannerElement = document.createElement('planner-element') as PlannerElement);
       map.controls[google.maps.ControlPosition.RIGHT_TOP].push(el);
       el.addEventListener('close-flight', () => {
+        if (this.cylinders.length > 0) {
+          return;
+        }
         const path = (this.line as google.maps.Polyline).getPath();
         const last = path.getAt(path.getLength() - 1);
         const first = path.getAt(0);

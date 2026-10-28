@@ -295,3 +295,54 @@ export function optimizeTask(points: protos.Route, esIndex = -1): protos.Route {
   }
   return r;
 }
+
+const EARTH_RADIUS = 6378137;
+
+function toRad(deg: number): number {
+  return (deg * Math.PI) / 180;
+}
+
+function toDeg(rad: number): number {
+  return (rad * 180) / Math.PI;
+}
+
+// Clamps a point so that it lies on or within the given cylinder.
+export function clampToCylinder(
+  point: { lat: number; lon: number },
+  cylinder: { lat: number; lon: number; radius: number },
+): { lat: number; lon: number } {
+  if (cylinder.radius <= 0) {
+    return { lat: cylinder.lat, lon: cylinder.lon };
+  }
+  const lat1 = toRad(cylinder.lat);
+  const lon1 = toRad(cylinder.lon);
+  const lat2 = toRad(point.lat);
+  const lon2 = toRad(point.lon);
+  const dLat = lat2 - lat1;
+  const dLon = lon2 - lon1;
+
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
+  const distance = EARTH_RADIUS * c;
+
+  if (distance <= cylinder.radius) {
+    return { lat: point.lat, lon: point.lon };
+  }
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const bearing = Math.atan2(y, x);
+  const angularDistance = cylinder.radius / EARTH_RADIUS;
+
+  const sinLat3 =
+    Math.sin(lat1) * Math.cos(angularDistance) + Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing);
+  const lat3 = Math.asin(Math.max(-1, Math.min(1, sinLat3)));
+  const lon3 =
+    lon1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat3),
+    );
+
+  return { lat: toDeg(lat3), lon: toDeg(lon3) };
+}
