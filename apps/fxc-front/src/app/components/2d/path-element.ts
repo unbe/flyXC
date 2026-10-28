@@ -14,6 +14,8 @@ import { connect } from 'pwa-helpers';
 
 import { ClosingSector } from '../../gm/closing-sector';
 import { FaiSectors } from '../../gm/fai-sectors';
+import type { TurnpointHandle } from '../../gm/turnpoint-handle';
+import { createTurnpointHandle } from '../../gm/turnpoint-handle';
 import { addAltitude } from '../../logic/elevation';
 import { getCurrentUrl, pushCurrentState } from '../../logic/history';
 import { drawRoute } from '../../logic/messages';
@@ -63,10 +65,12 @@ export class PathElement extends connect(store)(LitElement) {
   private line?: google.maps.Polyline;
   private optimizedLine?: google.maps.Polyline;
   private cylinderCircles: google.maps.Circle[] = [];
+  private turnpointHandles: TurnpointHandle[] = [];
   // Set to true to block updating the state.
   // i.e. when the line is being created from the state.
   private doNotSyncState = false;
   private isClamping = false;
+  private isDraggingTurnpoint = false;
   private onPointAdded?: google.maps.MapsEventListener;
   private onBoundsChanged?: google.maps.MapsEventListener;
   private closingSector?: ClosingSector;
@@ -136,19 +140,24 @@ export class PathElement extends connect(store)(LitElement) {
       this.setDefaultPath();
     } else {
       const path = this.line.getPath();
-      path.clear();
-      const coords = google.maps.geometry.encoding.decodePath(this.encodedRoute);
-      coords.forEach((latLon) => {
-        path.push(latLon);
-      });
+      if (this.encodedRoute !== google.maps.geometry.encoding.encodePath(path) || path.getLength() === 0) {
+        path.clear();
+        const coords = google.maps.geometry.encoding.decodePath(this.encodedRoute);
+        coords.forEach((latLon) => {
+          path.push(latLon);
+        });
+      }
     }
     this.doNotSyncState = false;
+    this.updateTurnpointHandles();
     this.optimize();
   }
 
   private updateCylinders(): void {
     this.cylinderCircles.forEach((circle) => circle.setMap(null));
     this.cylinderCircles = [];
+
+    this.updateTurnpointHandles();
 
     if (this.isFreeDrawing || this.cylinders.length === 0) {
       return;
@@ -169,6 +178,49 @@ export class PathElement extends connect(store)(LitElement) {
           clickable: false,
         });
         this.cylinderCircles.push(circle);
+      }
+    }
+  }
+
+  private updateTurnpointHandles(): void {
+    const hasTaskCylinders = !this.isFreeDrawing && this.cylinders.length > 0;
+    this.line?.setEditable(!hasTaskCylinders);
+
+    if (!hasTaskCylinders || !this.line) {
+      this.turnpointHandles.forEach((h) => h.setMap(null));
+      this.turnpointHandles = [];
+      return;
+    }
+
+    const path = this.line.getPath();
+    const count = Math.min(this.cylinders.length, path.getLength());
+
+    if (this.turnpointHandles.length !== count) {
+      this.turnpointHandles.forEach((h) => h.setMap(null));
+      this.turnpointHandles = [];
+      for (let i = 0; i < count; i++) {
+        this.turnpointHandles.push(
+          createTurnpointHandle(
+            this.map,
+            path.getAt(i),
+            this.cylinders[i],
+            (clampedLatLng) => {
+              this.isDraggingTurnpoint = true;
+              this.doNotSyncState = true;
+              this.line?.getPath().setAt(i, clampedLatLng);
+              this.doNotSyncState = false;
+              this.isDraggingTurnpoint = false;
+            },
+            () => {
+              this.handlePathUpdates();
+            },
+          ),
+        );
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        this.turnpointHandles[i].setCylinder(this.cylinders[i]);
+        this.turnpointHandles[i].setPosition(path.getAt(i));
       }
     }
   }
@@ -251,7 +303,7 @@ export class PathElement extends connect(store)(LitElement) {
   // Optimize the route.
   private optimize(): void {
     const { line } = this;
-    if (!line || line.getPath().getLength() < 2 || this.doNotSyncState) {
+    if (!line || line.getPath().getLength() < 2 || (this.doNotSyncState && !this.isDraggingTurnpoint)) {
       return;
     }
 
@@ -479,6 +531,8 @@ export class PathElement extends connect(store)(LitElement) {
     this.optimizedLine = undefined;
     this.cylinderCircles.forEach((circle) => circle.setMap(null));
     this.cylinderCircles = [];
+    this.turnpointHandles.forEach((h) => h.setMap(null));
+    this.turnpointHandles = [];
     this.closingSector?.setMap(null);
     this.closingSector = undefined;
     this.faiSectors?.setMap(null);
