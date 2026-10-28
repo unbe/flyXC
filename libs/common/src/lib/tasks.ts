@@ -296,6 +296,14 @@ export function optimizeTask(points: protos.Route, esIndex = -1): protos.Route {
   return r;
 }
 
+export interface TaskCylinder {
+  lat: number;
+  lon: number;
+  radius: number;
+  optLat?: number;
+  optLon?: number;
+}
+
 const EARTH_RADIUS = 6378137;
 
 function toRad(deg: number): number {
@@ -306,6 +314,79 @@ function toDeg(rad: number): number {
   return (rad * 180) / Math.PI;
 }
 
+function sphericalDistanceM(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const lat1 = toRad(a.lat);
+  const lon1 = toRad(a.lon);
+  const lat2 = toRad(b.lat);
+  const lon2 = toRad(b.lon);
+  const dLat = lat2 - lat1;
+  const dLon = lon2 - lon1;
+
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
+  return EARTH_RADIUS * c;
+}
+
+export function isPointInCylinder(
+  point: { lat: number; lon: number },
+  cylinder: TaskCylinder,
+  toleranceM = 5,
+): boolean {
+  const allowance = Math.max(toleranceM, cylinder.radius * 0.002);
+  return sphericalDistanceM(point, cylinder) <= cylinder.radius + allowance;
+}
+
+export function isPathConformingToTask(
+  points: { lat: number; lon: number }[],
+  cylinders: TaskCylinder[],
+): boolean {
+  if (points.length < 2) {
+    return false;
+  }
+  if (cylinders.length === 0) {
+    return true;
+  }
+  let cylIdx = 0;
+  for (const pt of points) {
+    if (isPointInCylinder(pt, cylinders[cylIdx])) {
+      cylIdx++;
+      if (cylIdx === cylinders.length) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Returns the cylinder index that `points[vertexIndex]` must stay inside to keep the path
+// conforming to `cylinders`, or `null` if removing `points[vertexIndex]` still leaves the
+// path conforming to `cylinders`.
+export function getRequiredCylinderIndex(
+  points: { lat: number; lon: number }[],
+  vertexIndex: number,
+  cylinders: TaskCylinder[],
+): number | null {
+  if (cylinders.length === 0 || vertexIndex < 0 || vertexIndex >= points.length) {
+    return null;
+  }
+  let prefixCyl = 0;
+  for (let i = 0; i < vertexIndex && prefixCyl < cylinders.length; i++) {
+    if (isPointInCylinder(points[i], cylinders[prefixCyl])) {
+      prefixCyl++;
+    }
+  }
+  let suffixCyl = cylinders.length - 1;
+  for (let i = points.length - 1; i > vertexIndex && suffixCyl >= 0; i--) {
+    if (isPointInCylinder(points[i], cylinders[suffixCyl])) {
+      suffixCyl--;
+    }
+  }
+  if (prefixCyl > suffixCyl) {
+    return null;
+  }
+  return prefixCyl;
+}
+
 // Clamps a point so that it lies on or within the given cylinder.
 export function clampToCylinder(
   point: { lat: number; lon: number },
@@ -314,20 +395,17 @@ export function clampToCylinder(
   if (cylinder.radius <= 0) {
     return { lat: cylinder.lat, lon: cylinder.lon };
   }
-  const lat1 = toRad(cylinder.lat);
-  const lon1 = toRad(cylinder.lon);
-  const lat2 = toRad(point.lat);
-  const lon2 = toRad(point.lon);
-  const dLat = lat2 - lat1;
-  const dLon = lon2 - lon1;
-
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
-  const distance = EARTH_RADIUS * c;
+  const distance = sphericalDistanceM(cylinder, point);
 
   if (distance <= cylinder.radius) {
     return { lat: point.lat, lon: point.lon };
   }
+
+  const lat1 = toRad(cylinder.lat);
+  const lon1 = toRad(cylinder.lon);
+  const lat2 = toRad(point.lat);
+  const lon2 = toRad(point.lon);
+  const dLon = lon2 - lon1;
 
   const y = Math.sin(dLon) * Math.cos(lat2);
   const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);

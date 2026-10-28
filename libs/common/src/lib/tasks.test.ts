@@ -1,7 +1,7 @@
 import { getDistance } from 'geolib';
 
 import * as protos from '../protos/track';
-import { clampToCylinder, optimizeTask } from './tasks';
+import { clampToCylinder, getRequiredCylinderIndex, isPathConformingToTask, optimizeTask } from './tasks';
 
 describe('tasks', () => {
   describe('clampToCylinder', () => {
@@ -65,6 +65,48 @@ describe('tasks', () => {
       );
       expect(Math.abs(d1 - 4800)).toBeLessThan(20);
       expect(Math.abs(d2 - 1000)).toBeLessThan(10);
+    });
+  });
+
+  describe('isPathConformingToTask & getRequiredCylinderIndex', () => {
+    const cylinders = [
+      { lat: 46.65707, lon: 8.0553, radius: 400 },
+      { lat: 46.57578, lon: 7.93825, radius: 4800 },
+      { lat: 46.65437, lon: 8.104, radius: 1000 },
+    ];
+
+    test('identifies required cylinders when path has exact task turnpoints', () => {
+      const points = cylinders.map((c) => ({ lat: c.lat, lon: c.lon }));
+      expect(isPathConformingToTask(points, cylinders)).toBe(true);
+      expect(getRequiredCylinderIndex(points, 0, cylinders)).toBe(0);
+      expect(getRequiredCylinderIndex(points, 1, cylinders)).toBe(1);
+      expect(getRequiredCylinderIndex(points, 2, cylinders)).toBe(2);
+    });
+
+    test('allows deleting extra intermediate points while keeping cylinder points required', () => {
+      const points = [
+        { lat: cylinders[0].lat, lon: cylinders[0].lon },
+        { lat: 46.62, lon: 8.0 }, // intermediate point outside cylinders
+        { lat: cylinders[1].lat, lon: cylinders[1].lon },
+        { lat: cylinders[2].lat, lon: cylinders[2].lon },
+      ];
+      expect(isPathConformingToTask(points, cylinders)).toBe(true);
+      expect(getRequiredCylinderIndex(points, 0, cylinders)).toBe(0);
+      expect(getRequiredCylinderIndex(points, 1, cylinders)).toBeNull();
+      expect(getRequiredCylinderIndex(points, 2, cylinders)).toBe(1);
+      expect(getRequiredCylinderIndex(points, 3, cylinders)).toBe(2);
+    });
+
+    test('allows deleting one of two points inside the same cylinder', () => {
+      const points = [
+        { lat: cylinders[0].lat, lon: cylinders[0].lon },
+        { lat: cylinders[1].lat, lon: cylinders[1].lon },
+        { lat: cylinders[1].lat + 0.001, lon: cylinders[1].lon }, // second point inside cylinder 1
+        { lat: cylinders[2].lat, lon: cylinders[2].lon },
+      ];
+      expect(isPathConformingToTask(points, cylinders)).toBe(true);
+      expect(getRequiredCylinderIndex(points, 1, cylinders)).toBeNull();
+      expect(getRequiredCylinderIndex(points, 2, cylinders)).toBeNull();
     });
   });
 });

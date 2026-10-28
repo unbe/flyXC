@@ -2,7 +2,7 @@ import '../ui/share-modal';
 import '../ui/waypoint-modal';
 
 import type { LatLon, RuntimeTrack } from '@flyxc/common';
-import { clampToCylinder } from '@flyxc/common';
+import { clampToCylinder, getRequiredCylinderIndex } from '@flyxc/common';
 import { CircuitType } from '@flyxc/optimizer/src/lib/api';
 import type { ScoringResult } from '@flyxc/optimizer/src/lib/optimizer';
 import { modalController, toastController } from '@ionic/core/components';
@@ -14,8 +14,8 @@ import { connect } from 'pwa-helpers';
 
 import { ClosingSector } from '../../gm/closing-sector';
 import { FaiSectors } from '../../gm/fai-sectors';
-import type { TurnpointHandle } from '../../gm/turnpoint-handle';
-import { createTurnpointHandle } from '../../gm/turnpoint-handle';
+import type { MidpointHandle, TurnpointHandle } from '../../gm/turnpoint-handle';
+import { createMidpointHandle, createTurnpointHandle } from '../../gm/turnpoint-handle';
 import { addAltitude } from '../../logic/elevation';
 import { getCurrentUrl, pushCurrentState } from '../../logic/history';
 import { drawRoute } from '../../logic/messages';
@@ -66,6 +66,7 @@ export class PathElement extends connect(store)(LitElement) {
   private optimizedLine?: google.maps.Polyline;
   private cylinderCircles: google.maps.Circle[] = [];
   private turnpointHandles: TurnpointHandle[] = [];
+  private midpointHandles: MidpointHandle[] = [];
   // Set to true to block updating the state.
   // i.e. when the line is being created from the state.
   private doNotSyncState = false;
@@ -189,11 +190,13 @@ export class PathElement extends connect(store)(LitElement) {
     if (!hasTaskCylinders || !this.line) {
       this.turnpointHandles.forEach((h) => h.setMap(null));
       this.turnpointHandles = [];
+      this.midpointHandles.forEach((h) => h.setMap(null));
+      this.midpointHandles = [];
       return;
     }
 
     const path = this.line.getPath();
-    const count = Math.min(this.cylinders.length, path.getLength());
+    const count = path.getLength();
 
     if (this.turnpointHandles.length !== count) {
       this.turnpointHandles.forEach((h) => h.setMap(null));
@@ -203,11 +206,59 @@ export class PathElement extends connect(store)(LitElement) {
           createTurnpointHandle(
             this.map,
             path.getAt(i),
-            this.cylinders[i],
-            (clampedLatLng) => {
+            () => {
+              const reqIdx = getRequiredCylinderIndex(this.getPathPoints(), i, this.cylinders);
+              return reqIdx !== null ? this.cylinders[reqIdx] : null;
+            },
+            (nextLatLng) => {
               this.isDraggingTurnpoint = true;
               this.doNotSyncState = true;
-              this.line?.getPath().setAt(i, clampedLatLng);
+              this.line?.getPath().setAt(i, nextLatLng);
+              this.doNotSyncState = false;
+              this.isDraggingTurnpoint = false;
+              if (i > 0) {
+                this.midpointHandles[i - 1]?.setEndpoints(path.getAt(i - 1), nextLatLng);
+              }
+              if (i + 1 < path.getLength()) {
+                this.midpointHandles[i]?.setEndpoints(nextLatLng, path.getAt(i + 1));
+              }
+            },
+            () => {
+              this.handlePathUpdates();
+            },
+            () => {
+              this.handleDeleteVertex(i);
+            },
+          ),
+        );
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        this.turnpointHandles[i].setPosition(path.getAt(i));
+      }
+    }
+
+    const midCount = Math.max(0, count - 1);
+    if (this.midpointHandles.length !== midCount) {
+      this.midpointHandles.forEach((h) => h.setMap(null));
+      this.midpointHandles = [];
+      for (let i = 0; i < midCount; i++) {
+        this.midpointHandles.push(
+          createMidpointHandle(
+            this.map,
+            path.getAt(i),
+            path.getAt(i + 1),
+            (latLng) => {
+              this.isDraggingTurnpoint = true;
+              this.doNotSyncState = true;
+              this.line?.getPath().insertAt(i + 1, latLng);
+              this.doNotSyncState = false;
+              this.isDraggingTurnpoint = false;
+            },
+            (latLng) => {
+              this.isDraggingTurnpoint = true;
+              this.doNotSyncState = true;
+              this.line?.getPath().setAt(i + 1, latLng);
               this.doNotSyncState = false;
               this.isDraggingTurnpoint = false;
             },
@@ -218,9 +269,8 @@ export class PathElement extends connect(store)(LitElement) {
         );
       }
     } else {
-      for (let i = 0; i < count; i++) {
-        this.turnpointHandles[i].setCylinder(this.cylinders[i]);
-        this.turnpointHandles[i].setPosition(path.getAt(i));
+      for (let i = 0; i < midCount; i++) {
+        this.midpointHandles[i].setEndpoints(path.getAt(i), path.getAt(i + 1));
       }
     }
   }
@@ -237,9 +287,7 @@ export class PathElement extends connect(store)(LitElement) {
   }
 
   private appendToPath(coord: google.maps.LatLng): void {
-    if (this.cylinders.length === 0) {
-      this.line?.getPath().push(coord);
-    }
+    this.line?.getPath().push(coord);
   }
 
   private createLine(): google.maps.Polyline {
@@ -261,21 +309,15 @@ export class PathElement extends connect(store)(LitElement) {
     const path = line.getPath();
     google.maps.event.addListener(path, 'set_at', (index: number) => this.handleSetAt(index));
     google.maps.event.addListener(path, 'remove_at', () => this.handlePathUpdates());
-    google.maps.event.addListener(path, 'insert_at', (index: number) => this.handleInsertAt(index));
+    google.maps.event.addListener(path, 'insert_at', () => this.handlePathUpdates());
     google.maps.event.addListener(line, 'rightclick', (event: google.maps.PolyMouseEvent): void => {
-      if (this.cylinders.length === 0 && event.vertex !== undefined) {
-        const path = line.getPath();
-        if (path.getLength() > 2) {
-          path.removeAt(event.vertex);
-        }
+      if (event.vertex !== undefined) {
+        this.handleDeleteVertex(event.vertex);
       }
     });
     google.maps.event.addListener(line, 'dblclick', (event: google.maps.PolyMouseEvent): void => {
-      if (this.cylinders.length === 0 && event.vertex !== undefined) {
-        const path = line.getPath();
-        if (path.getLength() > 2) {
-          path.removeAt(event.vertex);
-        }
+      if (event.vertex !== undefined) {
+        this.handleDeleteVertex(event.vertex);
       }
     });
     this.onPointAdded = google.maps.event.addListener(this.map, 'rightclick', (e: google.maps.MapMouseEvent) =>
@@ -394,30 +436,49 @@ export class PathElement extends connect(store)(LitElement) {
     if (this.isClamping) {
       return;
     }
-    if (!this.doNotSyncState && this.line && index < this.cylinders.length) {
+    if (!this.doNotSyncState && this.line && this.cylinders.length > 0) {
       const path = this.line.getPath();
-      const pt = path.getAt(index);
-      const clamped = clampToCylinder({ lat: pt.lat(), lon: pt.lng() }, this.cylinders[index]);
-      if (clamped.lat !== pt.lat() || clamped.lon !== pt.lng()) {
-        this.isClamping = true;
-        path.setAt(index, new google.maps.LatLng(clamped.lat, clamped.lon));
-        this.isClamping = false;
+      const requiredCylIdx = getRequiredCylinderIndex(this.getPathPoints(), index, this.cylinders);
+      if (requiredCylIdx !== null) {
+        const pt = path.getAt(index);
+        const clamped = clampToCylinder({ lat: pt.lat(), lon: pt.lng() }, this.cylinders[requiredCylIdx]);
+        if (clamped.lat !== pt.lat() || clamped.lon !== pt.lng()) {
+          this.isClamping = true;
+          path.setAt(index, new google.maps.LatLng(clamped.lat, clamped.lon));
+          this.isClamping = false;
+        }
       }
     }
     this.handlePathUpdates();
   }
 
-  private handleInsertAt(index: number): void {
-    if (!this.doNotSyncState && this.line && this.cylinders.length > 0) {
-      const path = this.line.getPath();
-      if (path.getLength() > this.cylinders.length) {
-        this.doNotSyncState = true;
-        path.removeAt(index);
-        this.doNotSyncState = false;
-        return;
-      }
+  private handleDeleteVertex(index: number): void {
+    if (!this.line) {
+      return;
     }
-    this.handlePathUpdates();
+    const path = this.line.getPath();
+    if (this.cylinders.length === 0) {
+      if (path.getLength() > 2) {
+        path.removeAt(index);
+      }
+      return;
+    }
+
+    const requiredCylIdx = getRequiredCylinderIndex(this.getPathPoints(), index, this.cylinders);
+    if (requiredCylIdx === null && path.getLength() > 2) {
+      path.removeAt(index);
+      return;
+    }
+
+    if (requiredCylIdx !== null) {
+      const cylinder = this.cylinders[requiredCylIdx];
+      const optLat = cylinder.optLat ?? cylinder.lat;
+      const optLon = cylinder.optLon ?? cylinder.lon;
+      this.isClamping = true;
+      path.setAt(index, new google.maps.LatLng(optLat, optLon));
+      this.isClamping = false;
+      this.handlePathUpdates();
+    }
   }
 
   private handlePathUpdates(): void {
@@ -428,6 +489,9 @@ export class PathElement extends connect(store)(LitElement) {
     if (!this.doNotSyncState) {
       pushCurrentState();
       store.dispatch(plannerSlice.setRoute(google.maps.geometry.encoding.encodePath(path)));
+    }
+    if (!this.isDraggingTurnpoint) {
+      this.updateTurnpointHandles();
     }
     let distanceM = 0;
     const latlonPath = path.getArray().map((latLng: google.maps.LatLng) => ({ lat: latLng.lat(), lon: latLng.lng() }));
@@ -447,9 +511,6 @@ export class PathElement extends connect(store)(LitElement) {
       const el = (this.plannerElement = document.createElement('planner-element') as PlannerElement);
       map.controls[google.maps.ControlPosition.RIGHT_TOP].push(el);
       el.addEventListener('close-flight', () => {
-        if (this.cylinders.length > 0) {
-          return;
-        }
         const path = (this.line as google.maps.Polyline).getPath();
         const last = path.getAt(path.getLength() - 1);
         const first = path.getAt(0);
@@ -533,6 +594,8 @@ export class PathElement extends connect(store)(LitElement) {
     this.cylinderCircles = [];
     this.turnpointHandles.forEach((h) => h.setMap(null));
     this.turnpointHandles = [];
+    this.midpointHandles.forEach((h) => h.setMap(null));
+    this.midpointHandles = [];
     this.closingSector?.setMap(null);
     this.closingSector = undefined;
     this.faiSectors?.setMap(null);

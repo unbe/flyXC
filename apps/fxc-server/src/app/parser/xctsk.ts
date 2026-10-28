@@ -23,9 +23,8 @@ export function parse(content: string): protos.Route | null {
   }
 
   const route = protos.Route.create();
-  let esIndex = -1;
 
-  json.turnpoints.forEach((tp: any, index: number) => {
+  json.turnpoints.forEach((tp: any) => {
     const lat = Number(tp.waypoint?.lat ?? 0);
     const lon = Number(tp.waypoint?.lon ?? 0);
     route.lat.push(lat);
@@ -34,10 +33,7 @@ export function parse(content: string): protos.Route | null {
     route.centerLat.push(lat);
     route.centerLon.push(lon);
     route.radius.push(Number(tp.radius ?? 0));
-    if (tp.type === 'ESS') {
-      esIndex = index;
-    }
   });
 
-  return optimizeTask(route, esIndex);
+  return optimizeTask(route);
 }

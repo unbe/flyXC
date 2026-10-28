@@ -9,6 +9,8 @@ export type Cylinder = {
   lat: number;
   lon: number;
   radius: number;
+  optLat?: number;
+  optLon?: number;
 };
 
 export type PlannerState = {

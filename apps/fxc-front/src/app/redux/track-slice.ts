@@ -158,13 +158,13 @@ export const fetchTrack = createAsyncThunk('track/fetch', async (params: FetchTr
     const cylinders: Cylinder[] = [];
     if (route.radius.length > 0 && route.centerLat.length === route.radius.length) {
       for (let i = 0; i < route.radius.length; i++) {
-        if (route.radius[i] > 0) {
-          cylinders.push({
-            lat: route.centerLat[i],
-            lon: route.centerLon[i],
-            radius: route.radius[i],
-          });
-        }
+        cylinders.push({
+          lat: route.centerLat[i],
+          lon: route.centerLon[i],
+          radius: route.radius[i],
+          optLat: route.lat[i],
+          optLon: route.lon[i],
+        });
       }
     }
     api.dispatch(setCylinders(cylinders));

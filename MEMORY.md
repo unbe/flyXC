@@ -65,20 +65,25 @@ This document serves as the source of truth for architectural decisions, system 
   - Iteratively adjusts target points `(fx, fy)` on each cylinder of radius `radius` using line-circle intersection and reflection (`optimize()`), converging until total path distance changes by `< 1.0m` (up to `count * 10` steps).
   - **ESS (`esIndex`) Handling**: For `index == points.length - 1` or `index == esIndex`, the outgoing reference point `b` uses the target cylinder's center `c`.
   - Converts the optimized `(fx, fy)` back to WGS84 (`utm.toLatLon`) and stores them in `route.lat` and `route.lon`, while preserving `centerLat`, `centerLon`, and `radius`.
-  - **Cylinder Clamping (`clampToCylinder`)**: Uses spherical geometry (`EARTH_RADIUS = 6378137`, matching `google.maps.Circle` and `google.maps.geometry.spherical`) to check if a point lies within `cylinder.radius` of `(cylinder.lat, cylinder.lon)`. If outside, projects the point onto the cylinder perimeter along the great-circle bearing from the cylinder center.
+  - **Cylinder Clamping & Task Conformance (`clampToCylinder`, `isPathConformingToTask`, `getRequiredCylinderIndex`)**:
+    - `clampToCylinder` uses spherical geometry (`EARTH_RADIUS = 6378137`, matching `google.maps.Circle` and `google.maps.geometry.spherical`) to check if a point lies within `cylinder.radius` of `(cylinder.lat, cylinder.lon)`, projecting outside points onto the cylinder perimeter along the great-circle bearing from the cylinder center.
+    - `getRequiredCylinderIndex(points, vertexIndex, cylinders)` checks how many cylinders from the start (`prefixCyl`) are matched in order by `points[0 .. vertexIndex - 1]` and how many cylinders from the end (`suffixCyl`) are matched in reverse order by `points[vertexIndex + 1 .. points.length - 1]`. If `prefixCyl > suffixCyl`, `points[vertexIndex]` is not required to keep the path conforming to `cylinders` (returns `null`); otherwise returns `prefixCyl` (the cylinder index that `points[vertexIndex]` must satisfy).
 
 ### Frontend Task & Cylinder Rendering (`apps/fxc-front`)
 - **State (`apps/fxc-front/src/app/redux/planner-slice.ts`)**:
   - `planner.route`: Encoded circuit string representing the route polyline vertices (initialized from `route.lat` / `route.lon`, which are the optimized points on the cylinders).
-  - `planner.cylinders`: Array of `Cylinder` (`{ lat, lon, radius }`) populated by `fetchTrack` (`apps/fxc-front/src/app/redux/track-slice.ts`) when a `MetaTrackGroup` contains a `route` with `centerLat`, `centerLon`, and `radius`.
+  - `planner.cylinders`: Array of `Cylinder` (`{ lat, lon, radius, optLat?, optLon? }`) populated by `fetchTrack` (`apps/fxc-front/src/app/redux/track-slice.ts`) when a `MetaTrackGroup` contains a `route` with `centerLat`, `centerLon`, and `radius`. `optLat` and `optLon` preserve each cylinder's initial task-optimized position.
   - Calling `setRoute('')` (e.g. closing or resetting the planner/route) also clears `planner.cylinders`.
 - **2D Map Rendering & Task Conformance (`apps/fxc-front/src/app/components/2d/path-element.ts`)**:
   - Subscribes to `plannerSlice.selectCylinders(state)`.
   - Renders `google.maps.Circle` overlays for each cylinder with `radius > 0` (`strokeColor: '#0000ff'`, `fillColor: '#0000ff'`, `clickable: false`).
   - Unions each circle's bounds into the `LatLngBounds` when fitting the map to the loaded route, ensuring full cylinders remain visible inside the viewport.
   - Cleans up `cylinderCircles` on re-render and `disconnectedCallback()`.
-  - **Conforming Turnpoints to Cylinders (`apps/fxc-front/src/app/gm/turnpoint-handle.ts`)**:
+  - **Conforming Turnpoints, Midpoint Insertion, and Deletion (`apps/fxc-front/src/app/gm/turnpoint-handle.ts`)**:
     - Native `google.maps.Polyline({ editable: true })` only fires `set_at` on `mouseup` (`dragend`) and renders an unclamped ghost vertex during drag.
-    - Therefore, when `this.cylinders.length > 0`, `this.line.setEditable(false)` is set and custom `TurnpointHandle` overlays (`google.maps.OverlayView` using `setPointerCapture` on `overlayMouseTarget`) are rendered for each turnpoint.
-    - On every `pointermove` frame while dragging, `TurnpointHandle` converts the pointer delta via `MapCanvasProjection.fromDivPixelToLatLng`, clamps the coordinate with `clampToCylinder(rawLatLon, cylinder)`, updates its own DOM position and `this.line.getPath().setAt(i, clampedLatLng)` (with `doNotSyncState = true` and `isDraggingTurnpoint = true` so the polyline, distance, and live optimization update immediately without spamming browser history), and syncs the final encoded route to Redux/URL on `pointerup`.
-    - When `this.cylinders.length > 0`, adding new vertices (`insert_at`, `appendToPath`, `close-flight`) and deleting vertices (right-click / double-click) are blocked so the route always conforms to the task's turnpoint sequence.
+    - Therefore, when `this.cylinders.length > 0`, `this.line.setEditable(false)` is set and custom `TurnpointHandle` overlays (for each vertex) and `MidpointHandle` overlays (for each segment midpoint) are rendered on `overlayMouseTarget` using `setPointerCapture`.
+    - **Dragging a vertex**: On `pointerdown`, `getRequiredCylinderIndex` determines if the vertex is required for a cylinder (`activeCylinder`). If required, `pointermove` clamps the vertex live to `activeCylinder` via `clampToCylinder`; if not required (e.g. an added intermediate waypoint or one of multiple points inside the same cylinder), it moves freely.
+    - **Inserting points**: Dragging a `MidpointHandle` inserts a new vertex at `i + 1`, and map right-click (`appendToPath`) / `close-flight` append vertices to the route.
+    - **Deleting a vertex (`handleDeleteVertex` via right-click or double-click)**:
+      - If `getRequiredCylinderIndex` returns `null` (removing the vertex still leaves the path conforming to all task cylinders in order) and `path.getLength() > 2`, the vertex is removed via `path.removeAt(index)`.
+      - If `getRequiredCylinderIndex` returns a cylinder index `reqIdx` (removing the vertex would make the path not conform to the task), the vertex is not removed and instead snaps back to that cylinder's optimized position `(cylinder.optLat ?? cylinder.lat, cylinder.optLon ?? cylinder.lon)`.
